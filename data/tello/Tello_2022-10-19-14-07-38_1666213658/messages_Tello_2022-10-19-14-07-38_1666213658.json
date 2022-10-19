@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": 1666213658.260614,
+    "command": "command",
+    "response_time": 1666213658.3425505,
+    "response": "ok"
+  },
+  {
+    "timestamp": 1666213658.3425505,
+    "command": "streamoff",
+    "response_time": 1666213658.3632898,
+    "response": "ok"
+  },
+  {
+    "timestamp": 1666213658.3632898,
+    "command": "streamon",
+    "response_time": 1666213658.4141295,
+    "response": "ok"
+  },
+  {
+    "timestamp": 1666213669.4272928,
+    "command": "streamoff",
+    "response_time": 1666213669.4342217,
+    "response": "ok"
+  }
+]
