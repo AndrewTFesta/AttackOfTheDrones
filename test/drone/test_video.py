@@ -3,9 +3,9 @@
 @description
 """
 import argparse
-from pathlib import Path
+import time
 
-from aotd import DATA_DIR
+from aotd.tello_drone import TelloDrone
 
 
 def main(main_args):
@@ -14,9 +14,18 @@ def main(main_args):
     :param main_args:
     :return:
     """
-    log_id = main_args.get('log_id', None)
-    log_dir = main_args.get('log_dir', Path(DATA_DIR, 'keylogger'))
-    run_length = main_args.get('run_length', 10)
+    send_delay = main_args.get('send_delay', 0.1)
+    scan_delay = main_args.get('scan_delay', 0.1)
+    ###################################
+    tello_drone = TelloDrone()
+    ###################################
+    tello_drone.NETWORK_SCAN_DELAY = scan_delay
+    tello_drone.SEND_DELAY = send_delay
+    tello_drone.connect()
+    tello_drone.start_video()
+
+    time.sleep(20)
+    tello_drone.cleanup()
     return
 
 
