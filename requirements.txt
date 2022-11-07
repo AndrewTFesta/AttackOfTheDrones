@@ -2,4 +2,3 @@ psutil
 opencv-python
 numpy
 setuptools
-netifaces

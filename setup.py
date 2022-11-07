@@ -5,7 +5,7 @@ https://packaging.python.org/tutorials/packaging-projects/
 import os
 import setuptools
 
-from coord_shaping import project_properties
+from aotd import project_properties
 
 if os.path.exists('README.md'):
     with open('README.md', 'r') as desc_file:
@@ -35,8 +35,5 @@ setuptools.setup(
     ],
 
     packages=setuptools.find_packages(),
-    install_requires=requirements_list,
-    dependency_links=[],
-    package_dir={'cython_test': ''},
-    zip_safe=False
+    install_requires=requirements_list
 )
