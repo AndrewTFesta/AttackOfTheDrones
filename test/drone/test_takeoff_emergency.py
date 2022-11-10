@@ -5,6 +5,8 @@
 import argparse
 import time
 
+import cv2
+
 from aotd.tello_drone import TelloDrone
 
 
@@ -18,7 +20,7 @@ def main(main_args):
     scan_delay = main_args.get('scan_delay', 0.1)
     ###################################
     tello_drone = TelloDrone()
-    ###################################78s
+    ###################################
     tello_drone.NETWORK_SCAN_DELAY = scan_delay
     tello_drone.SEND_DELAY = send_delay
     tello_drone.connect()
