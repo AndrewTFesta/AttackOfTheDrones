@@ -1,4 +1,4 @@
-from tellopy import event
+from aotd.tellopy import event
 
 
 class signal(object):
