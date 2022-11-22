@@ -1,40 +1,81 @@
-"""
-@title
-@description
-"""
-import argparse
+import sys
+import threading
+import traceback
+import tellopy
+import av
+import cv2 as cv2  # for avoidance of pylint error
+import numpy
 import time
 
-from aotd.tello_drone import TelloDrone
 
-
-def main(main_args):
-    """
-
-    :param main_args:
-    :return:
-    """
-    send_delay = main_args.get('send_delay', 0.1)
-    scan_delay = main_args.get('scan_delay', 0.1)
-    ###################################
-    tello_drone = TelloDrone()
-    ###################################
-    tello_drone.NETWORK_SCAN_DELAY = scan_delay
-    tello_drone.SEND_DELAY = send_delay
-    tello_drone.connect()
-    tello_drone.start_video()
-
-    time.sleep(20)
-    tello_drone.cleanup()
+def handler(event, sender, data, **args):
+    drone = sender
+    if event is drone.EVENT_FLIGHT_DATA:
+        # print(data)
+        pass
     return
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--send_delay', type=float, default=1,
-                        help='')
-    parser.add_argument('--scan_delay', type=float, default=1,
-                        help='')
+def main():
+    def video_handler():
+        # skip first 300 frames
+        frame_skip = 300
+        video_running = True
+        while video_running:
+            print('video running')
+            for frame in container.decode(video=0):
+                if 0 < frame_skip:
+                    frame_skip = frame_skip - 1
+                    continue
+                start_time = time.time()
+                image = cv2.cvtColor(numpy.array(frame.to_image()), cv2.COLOR_RGB2BGR)
+                cv2.imshow('Original', image)
+                cv2.waitKey(1)
+                if frame.time_base < 1.0 / 60:
+                    time_base = 1.0 / 60
+                else:
+                    time_base = frame.time_base
+                frame_skip = int((time.time() - start_time) / time_base)
+        cv2.destroyAllWindows()
+        print(f'video exiting')
+        return
+    video_thread = threading.Thread(target=video_handler, daemon=True)
+    drone = tellopy.Tello()
 
-    args = parser.parse_args()
-    main(vars(args))
+    try:
+        drone.subscribe(drone.EVENT_FLIGHT_DATA, handler)
+
+        drone.connect()
+        drone.wait_for_connection(60.0)
+
+        retry = 3
+        container = None
+        while container is None and 0 < retry:
+            retry -= 1
+            try:
+                container = av.open(drone.get_video_stream())
+            except av.AVError as ave:
+                print(ave)
+                print('retry...')
+
+        video_thread.start()
+        # drone.takeoff()
+        # time.sleep(5)
+        # drone.down(50)
+        # time.sleep(5)
+        # drone.land()
+        time.sleep(20)
+        video_running = False
+        time.sleep(5)
+
+
+    except Exception as ex:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
+        print(ex)
+    finally:
+        drone.quit()
+
+
+if __name__ == '__main__':
+    main()

@@ -1,42 +1,30 @@
-"""
-@title
-@description
-"""
-import argparse
-import time
-
-from aotd.tello_drone import TelloDrone
+from time import sleep
+import tellopy
 
 
-def main(main_args):
-    """
+def handler(event, sender, data, **args):
+    drone = sender
+    if event is drone.EVENT_FLIGHT_DATA:
+        print(data)
 
-    :param main_args:
-    :return:
-    """
-    send_delay = main_args.get('send_delay', 0.1)
-    scan_delay = main_args.get('scan_delay', 0.1)
-    ###################################
-    tello_drone = TelloDrone()
-    ###################################
-    tello_drone.NETWORK_SCAN_DELAY = scan_delay
-    tello_drone.SEND_DELAY = send_delay
-    tello_drone.connect()
 
-    tello_drone.control_takeoff()
-    time.sleep(2)
-    tello_drone.control_land()
-    time.sleep(2)
-    tello_drone.cleanup()
-    return
+def test():
+    drone = tellopy.Tello()
+    try:
+        drone.subscribe(drone.EVENT_FLIGHT_DATA, handler)
 
+        drone.connect()
+        drone.wait_for_connection(60.0)
+        drone.takeoff()
+        sleep(5)
+        drone.down(50)
+        sleep(5)
+        drone.land()
+        sleep(5)
+    except Exception as ex:
+        print(ex)
+    finally:
+        drone.quit()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--send_delay', type=float, default=1,
-                        help='')
-    parser.add_argument('--scan_delay', type=float, default=1,
-                        help='')
-
-    args = parser.parse_args()
-    main(vars(args))
+    test()
