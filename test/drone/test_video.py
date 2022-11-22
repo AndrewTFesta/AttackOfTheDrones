@@ -1,5 +1,4 @@
 import sys
-import threading
 import traceback
 import tellopy
 import av
@@ -8,43 +7,10 @@ import numpy
 import time
 
 
-def handler(event, sender, data, **args):
-    drone = sender
-    if event is drone.EVENT_FLIGHT_DATA:
-        # print(data)
-        pass
-    return
-
-
 def main():
-    def video_handler():
-        # skip first 300 frames
-        frame_skip = 300
-        video_running = True
-        while video_running:
-            print('video running')
-            for frame in container.decode(video=0):
-                if 0 < frame_skip:
-                    frame_skip = frame_skip - 1
-                    continue
-                start_time = time.time()
-                image = cv2.cvtColor(numpy.array(frame.to_image()), cv2.COLOR_RGB2BGR)
-                cv2.imshow('Original', image)
-                cv2.waitKey(1)
-                if frame.time_base < 1.0 / 60:
-                    time_base = 1.0 / 60
-                else:
-                    time_base = frame.time_base
-                frame_skip = int((time.time() - start_time) / time_base)
-        cv2.destroyAllWindows()
-        print(f'video exiting')
-        return
-    video_thread = threading.Thread(target=video_handler, daemon=True)
     drone = tellopy.Tello()
 
     try:
-        drone.subscribe(drone.EVENT_FLIGHT_DATA, handler)
-
         drone.connect()
         drone.wait_for_connection(60.0)
 
@@ -58,15 +24,22 @@ def main():
                 print(ave)
                 print('retry...')
 
-        video_thread.start()
-        # drone.takeoff()
-        # time.sleep(5)
-        # drone.down(50)
-        # time.sleep(5)
-        # drone.land()
-        time.sleep(20)
-        video_running = False
-        time.sleep(5)
+        # skip first 300 frames
+        frame_skip = 300
+        while True:
+            for frame in container.decode(video=0):
+                if 0 < frame_skip:
+                    frame_skip = frame_skip - 1
+                    continue
+                start_time = time.time()
+                image = cv2.cvtColor(numpy.array(frame.to_image()), cv2.COLOR_RGB2BGR)
+                cv2.imshow('Original', image)
+                cv2.waitKey(1)
+                if frame.time_base < 1.0 / 60:
+                    time_base = 1.0 / 60
+                else:
+                    time_base = frame.time_base
+                frame_skip = int((time.time() - start_time) / time_base)
 
 
     except Exception as ex:
@@ -75,6 +48,7 @@ def main():
         print(ex)
     finally:
         drone.quit()
+        cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
