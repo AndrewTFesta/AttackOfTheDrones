@@ -60,6 +60,7 @@ def main():
                 print('retry...')
 
         video_thread.start()
+        time.sleep(10)
         drone.takeoff()
         time.sleep(5)
         drone.down(50)
