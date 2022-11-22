@@ -1,11 +1,12 @@
 import sys
 import threading
 import traceback
-import tellopy
 import av
 import cv2 as cv2  # for avoidance of pylint error
 import numpy
 import time
+
+from aotd.tellopy.tello import Tello
 
 
 def handler(event, sender, data, **args):
@@ -40,7 +41,7 @@ def main():
         print(f'video exiting')
         return
     video_thread = threading.Thread(target=video_handler, daemon=True)
-    drone = tellopy.Tello()
+    drone = Tello()
 
     try:
         drone.subscribe(drone.EVENT_FLIGHT_DATA, handler)

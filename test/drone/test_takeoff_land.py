@@ -1,5 +1,6 @@
 from time import sleep
-import tellopy
+
+from aotd import tellopy
 
 
 def handler(event, sender, data, **args):

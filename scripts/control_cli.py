@@ -3,7 +3,6 @@
 @description
 """
 import argparse
-import threading
 
 from aotd.tello_drone import TelloDrone
 

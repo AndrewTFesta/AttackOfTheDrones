@@ -1,14 +1,15 @@
 import sys
 import traceback
-import tellopy
 import av
 import cv2 as cv2  # for avoidance of pylint error
 import numpy
 import time
 
+from aotd.tellopy.tello import Tello
+
 
 def main():
-    drone = tellopy.Tello()
+    drone = Tello()
 
     try:
         drone.connect()
