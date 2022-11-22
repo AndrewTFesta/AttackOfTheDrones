@@ -3,52 +3,20 @@
 @description
 """
 import logging
-import os
-import socket
 import threading
 import time
 from datetime import datetime
-from enum import Enum
+from pathlib import Path
 
+import av
 import cv2
+import numpy as np
 
+from aotd import tellopy
 from aotd.project_properties import data_dir
 
 
-class FlipDirection(Enum):
-    """
-
-    """
-    LEFT = 'l'
-    RIGHT = 'r'
-    FORWARDS = 'f'
-    BACK = 'b'
-
-
 class TelloDrone:
-    # todo more clearly define the function of NETWORK_SCAN_DELAY and SEND_DELAY
-    # Network constants
-    BASE_SSID = 'TELLO-'
-    NETWORK_SCAN_DELAY = 0.5
-    NUM_RETRY = 5
-    MAX_TIME_OUT = 15
-
-    # Send/receive commands socket
-    TELLO_HOST = '192.168.10.1'
-    TELLO_PORT = 8889
-    LOCAL_HOST = ''
-    LOCAL_PORT = 8889
-    SEND_DELAY = 0.1
-    BUFFER_SIZE = 1024
-
-    # state stream constants
-    STATE_PORT = 8890
-    STATE_DELAY = 0.1
-    NUM_BASELINE_VALS = 10
-
-    # Video
-    VIDEO_UDP_URL = f'udp://0.0.0.0:11111'
-    FRAME_DELAY = 1
 
     def __init__(self):
         """
@@ -97,272 +65,214 @@ class TelloDrone:
         self.name = 'Tello'
         self.id = f'{self.name}_{time_str}_{int(current_time)}'
 
-        # To send comments
-        self.comm_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.comm_socket.bind((self.LOCAL_HOST, self.LOCAL_PORT))
+        # drone object used to communicate with tello drone
+        self.drone = tellopy.Tello()
 
-        self.response_thread = threading.Thread(target=self.__listen_responses, args=(), daemon=True)
-        self.response_thread.start()
-        self.listening_response = False
-        self.last_received = None
-
-        # Tello
-        self.tello_address = (self.TELLO_HOST, self.TELLO_PORT)
+        # state
+        # self.response_thread = threading.Thread(target=self.__listen_responses, args=(), daemon=True)
+        # self.response_thread.start()
+        # self.listening_response = False
+        # self.received = []
 
         # Video
+        self.video_stream = None
         self.video_thread = threading.Thread(target=self.__listen_video, args=(), daemon=True)
         self.video_running = False
 
         # save file names
-        self.save_directory = os.path.join(data_dir, 'tello', f'{self.id}')
-        if not os.path.isdir(self.save_directory):
-            os.makedirs(self.save_directory)
-        self.video_fname = os.path.join(self.save_directory, f'{self.id}.avi')
-
-        while not self.listening_response:
-            time.sleep(1)
+        self.save_directory = Path(data_dir, 'tello', f'{self.id}')
+        if not self.save_directory.is_dir():
+            self.save_directory.mkdir(parents=True, exist_ok=True)
+        self.video_fname = Path(self.save_directory, f'{self.id}.avi')
         return
 
-    def connect(self, max_retries=-1):
-        """
-
-        :return:
-        """
-        # todo add retry attempt to connect
-        # todo add delay between scanning
-        # todo add check if on correct ssid
-        command = 'command'
-        self.__send_command(command)
-        return True
-
-    def cleanup(self):
-        """
-
-        :return:
-        """
-        self.listening_response = False
-        self.video_running = False
-
-        self.comm_socket.close()
+    def handle_data(self, event, sender, data, **args):
+        self.drone = sender
+        print(f'{event}: {data}')
         return
 
-    def __send_command(self, command: str):
-        """
+    def connect(self):
+        # subscribe to data feeds
+        self.drone.subscribe(self.drone.EVENT_FLIGHT_DATA, self.handle_data)
+        self.drone.subscribe(self.drone.EVENT_LOG, self.handle_data)
+        self.drone.subscribe(self.drone.EVENT_LIGHT, self.handle_data)
+        self.drone.subscribe(self.drone.EVENT_WIFI, self.handle_data)
+        self.drone.subscribe(self.drone.EVENT_CONNECTED, self.handle_data)
+        self.drone.subscribe(self.drone.EVENT_DISCONNECTED, self.handle_data)
 
-        :param command:
-        :return:
-        """
-        # todo make into polling queue
-        enc_command = command.encode(encoding='utf-8')
-        logging.info(f'Sending message: {command}')
-        self.comm_socket.sendto(enc_command, self.tello_address)
+        self.drone.connect()
+        self.drone.wait_for_connection(60.0)
 
-        start = time.time()
-        while not self.last_received:
-            now = time.time()
-            diff = now - start
-            if diff > self.MAX_TIME_OUT:
-                return False
-        self.last_received = None
-        return True
+        # todo look into self.drone.toggle_fast_mode()
+        # self.drone.set_video_mode(not self.drone.zoom)
+        self.video_stream = self.drone.get_video_stream()
 
-    def __listen_responses(self):
-        self.listening_response = True
-        logging.info(f'Starting listening thread...')
-        while self.listening_response:
-            try:
-                response_bytes, ip = self.comm_socket.recvfrom(self.BUFFER_SIZE)
-                response_str = response_bytes.decode('utf-8')
-                logging.info(f'Received from {ip}: {response_str}')
-                self.last_received = response_str
-            except UnicodeDecodeError as ude:
-                logging.warning(f'Error in decoding response: {str(ude)}')
-        logging.info(f'Exiting listening thread...')
-        return
-
-    def start_video(self, max_retries=0):
-        # ensure the drone video stream is in a known state
-        self.control_streamoff()
-        self.control_streamon()
-        time.sleep(1)
+        # todo look into self.drone.set_video_mode()
+        # todo look into self.drone.set_exposure()
+        # todo look into self.drone.set_video_encoder_rate()
         self.video_thread.start()
-        return
+        return True
 
     def __listen_video(self):
-        """
-        always on
-
-        :return:
-        """
-        logging.info(f'Starting video thread...')
-        self.video_capture = cv2.VideoCapture(self.VIDEO_UDP_URL, cv2.CAP_FFMPEG)
-        # todo make opening stream into loop for XXX tries
-        while not self.video_capture.isOpened():
-            logging.info(f'Could not open video stream')
-            self.video_capture = cv2.VideoCapture(self.VIDEO_UDP_URL, cv2.CAP_FFMPEG)
-
-        logging.info(f'Opened video stream: {self.VIDEO_UDP_URL}')
-
-        # discard first read and make sure all is reading correctly
-        read_success, video_frame = self.video_capture.read()
-        # todo make reading stream into loop for XXX tries
-        while not read_success:
-            logging.info(f'Error reading from video stream')
-            read_success, video_frame = self.video_capture.read()
-
-        # save capture width and height for later when saving the video
-        fps = 30
-        frame_width = int(self.video_capture.get(3))
-        frame_height = int(self.video_capture.get(4))
-        logging.info(
-            f'Read frame from video stream\n'
-            f'FPS: {fps}\n'
-            f'Width: {frame_width}\n'
-            f'Height: {frame_height}'
-        )
-
-        codec_str = 'MJPG'
-        self.video_writer = cv2.VideoWriter(
-            self.video_fname, cv2.VideoWriter_fourcc(*codec_str),
-            fps, (frame_width, frame_height)
-        )
-
         self.video_running = True
-        self.video_start_time = time.time()
-        logging.info(f'running video loop')
-        while self.video_capture.isOpened() and self.video_running:
-            read_success, video_frame = self.video_capture.read()
-            logging.debug('received frame')
-            if read_success:
-                logging.debug(f'read frame success')
-                # self.video_writer.write(video_frame.astype('uint8'))
-                cv2.imshow('drone video', video_frame)
-            cv2.waitKey(self.FRAME_DELAY)
-        self.video_end_time = time.time()
+        try:
+            container = av.open(self.video_stream)
+            # skip first 300 frames
+            frame_skip = 300
+            while self.video_running:
+                try:
+                    for frame in container.decode(video=0):
+                        if 0 < frame_skip:
+                            frame_skip = frame_skip - 1
+                            continue
+                        start_time = time.time()
+                        image = cv2.cvtColor(np.array(frame.to_image()), cv2.COLOR_RGB2BGR)
 
-        self.video_capture.release()
-        self.video_writer.release()
-        cv2.destroyAllWindows()
+                        cv2.imshow('Original', image)
+                        cv2.waitKey(1)
+                        if frame.time_base < 1.0 / 60:
+                            time_base = 1.0 / 60
+                        else:
+                            time_base = frame.time_base
+                        frame_skip = int((time.time() - start_time) / time_base)
+                except Exception as ex:
+                    print(ex)
+        except Exception as ex:
+            print(ex)
         return
 
-    def control_streamoff(self):
-        """
-        takeoff
-
-        auto-takeoff
-
-        ok, error
-
-        :return:
-        """
-        command_str = f'streamoff'
-        self.__send_command(command_str)
+    def cleanup(self):
+        self.listening_response = False
+        self.video_running = False
         return
 
-    def control_streamon(self):
-        """
-        takeoff
-
-        auto-takeoff
-
-        ok, error
-
-        :return:
-        """
-        command_str = f'streamon'
-        self.__send_command(command_str)
-        return
-
+    # takeoff/land
     def control_takeoff(self):
-        """
-        takeoff
-
-        auto-takeoff
-
-        ok, error
-
-        :return:
-        """
-        command_str = f'takeoff'
-        self.__send_command(command_str)
-        return
-
-    def control_land(self):
-        """
-        lland
-
-        auto-land
-
-        ok, error
-
-        :return:
-        """
-        command_str = f'land'
-        self.__send_command(command_str)
-        return
-
-    def control_emergency(self):
-        """
-        emergency
-
-        immediately stops all motors
-
-        ok, error
-
-        :return:
-        """
-        command_str = f'emergency'
-        response = 'error'
-        self.__send_command(command_str)
+        # todo look into self.drone.manual_takeoff()
+        response = self.drone.takeoff()
         return response
 
-    def control_flip(self, direction: FlipDirection):
+    def control_land(self):
+        response = self.drone.land()
+        return response
+
+    def control_palm_land(self):
+        response = self.drone.palm_land()
+        return response
+
+    def control_emergency(self):
+        response = self.drone.quit()
+        return response
+
+    # tricks/flips
+    def flip_forward(self):
+        response = self.drone.flip_forward()
+        return response
+
+    def flip_back(self):
+        response = self.drone.flip_back()
+        return response
+
+    def flip_right(self):
+        response = self.drone.flip_right()
+        return response
+
+    def flip_left(self):
+        response = self.drone.flip_left()
+        return response
+
+    def flip_forwardleft(self):
+        response = self.drone.flip_forwardright()
+        return response
+
+    def flip_backleft(self):
+        response = self.drone.flip_backright()
+        return response
+
+    def flip_forwardright(self):
+        response = self.drone.flip_forwardright()
+        return response
+
+    def flip_backright(self):
+        response = self.drone.flip_backright()
+        return response
+
+    # direction
+    def up(self, val):
+        """Up tells the drone to ascend. Pass in an int from 0-100."""
+        response = self.drone.up(val)
+        return response
+
+    def down(self, val):
+        """Down tells the drone to descend. Pass in an int from 0-100."""
+        response = self.drone.down(val)
+        return response
+
+    def forward(self, val):
+        """Forward tells the drone to go forward. Pass in an int from 0-100."""
+        response = self.drone.forward(val)
+        return response
+
+    def backward(self, val):
+        """Backward tells the drone to go in reverse. Pass in an int from 0-100."""
+        response = self.drone.backward(val)
+        return response
+
+    def right(self, val):
+        """Right tells the drone to go right. Pass in an int from 0-100."""
+        response = self.drone.right(val)
+        return response
+
+    def left(self, val):
+        """Left tells the drone to go left. Pass in an int from 0-100."""
+        response = self.drone.left(val)
+        return response
+
+    def clockwise(self, val):
         """
-        flip x
-
-        perform a flip
-        l: left
-        r: right
-        f: forward
-        b: back
-
-        ok, error
-
-        :return:
+        Clockwise tells the drone to rotate in a clockwise direction.
+        Pass in an int from 0-100.
         """
-        command_str = f'flip {direction.value}'
-        self.__send_command(command_str)
-        return
+        response = self.drone.clockwise(val)
+        return response
 
-    def set_speed(self, speed_cms):
+    def counter_clockwise(self, val):
         """
-        speed x
-
-        set speed to x (cm/s)
-        x: 10-100
-
-        ok, error
-
-        :param speed_cms:
-        :return:
+        CounterClockwise tells the drone to rotate in a counter-clockwise direction.
+        Pass in an int from 0-100.
         """
-        command_str = f'speed {int(speed_cms)}'
-        self.__send_command(command_str)
-        return
+        response = self.drone.counter_clockwise(val)
+        return response
 
-    def set_rc(self, left_right, forward_back, up_down, yaw):
+    # axes/power
+    def set_throttle(self, throttle):
         """
-        Send RC control via four channels.
-
-        left/right (-100~100)
-        forward/backward (-100~100)
-        up/down (-100~100)
-        yaw (-100~100)
-
-        ok, error
-
-        :return:
+        Set_throttle controls the vertical up and down motion of the drone.
+        Pass in an int from -1.0 ~ 1.0. (positive value means upward)
         """
-        command_str = f'rc {left_right} {forward_back} {up_down} {yaw}'
-        self.__send_command(command_str)
-        return
+        response = self.drone.set_throttle(throttle)
+        return response
+
+    def set_yaw(self, yaw):
+        """
+        Set_yaw controls the left and right rotation of the drone.
+        Pass in an int from -1.0 ~ 1.0. (positive value will make the drone turn to the right)
+        """
+        response = self.drone.set_yaw(yaw)
+        return response
+
+    def set_pitch(self, pitch):
+        """
+        Set_pitch controls the forward and backward tilt of the drone.
+        Pass in an int from -1.0 ~ 1.0. (positive value will make the drone move forward)
+        """
+        response = self.drone.set_pitch(pitch)
+        return response
+
+    def set_roll(self, roll):
+        """
+        Set_roll controls the the side to side tilt of the drone.
+        Pass in an int from -1.0 ~ 1.0. (positive value will make the drone move to the right)
+        """
+        response = self.drone.set_roll(roll)
+        return response

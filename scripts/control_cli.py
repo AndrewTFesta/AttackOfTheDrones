@@ -5,7 +5,7 @@
 import argparse
 import threading
 
-from auto_drone.drone.tello_drone import TelloDrone
+from aotd.tello_drone import TelloDrone
 
 
 class ControlCli:
@@ -64,18 +64,10 @@ def main(main_args):
     tello_drone.SEND_DELAY = send_delay
     tello_drone.connect()
 
+    ###################################
     control_cli = ControlCli(drone=tello_drone)
-    ###################################
-    print(tello_drone)
-    # connect call blocks until connected
-    connect_thread = threading.Thread(
-        target=tello_drone.connect(),
-        args=(),
-        daemon=True
-    )
-    connect_thread.start()
-    ###################################
     control_cli.run_menu()
+    ###################################
     return
 
 

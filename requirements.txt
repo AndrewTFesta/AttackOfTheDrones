@@ -2,3 +2,5 @@ psutil
 opencv-python
 numpy
 setuptools
+av
+tellopy
