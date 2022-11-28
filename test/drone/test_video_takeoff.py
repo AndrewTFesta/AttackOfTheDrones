@@ -29,7 +29,10 @@ def main():
                     frame_skip = frame_skip - 1
                     continue
                 start_time = time.time()
-                image = cv2.cvtColor(numpy.array(frame.to_image()), cv2.COLOR_RGB2BGR)
+                video_frame = frame.to_image()
+                # todo  process frame to find qr code
+                #       draw square on frame
+                image = cv2.cvtColor(numpy.array(video_frame), cv2.COLOR_RGB2BGR)
                 cv2.imshow('Original', image)
                 cv2.waitKey(1)
                 if frame.time_base < 1.0 / 60:
