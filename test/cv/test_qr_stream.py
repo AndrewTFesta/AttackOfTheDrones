@@ -52,6 +52,7 @@ def main(main_args):
         while cap.isOpened() and not stopped:
             ret, image = cap.read()
             if ret:
+                empty_image = np.zeros_like(image)
                 detected, points, info, qr_frame = detect_qr(image)
                 if points is not None:
                     # get center of all points
@@ -81,11 +82,18 @@ def main(main_args):
                     hsv[..., 0] = ang * 180 / np.pi / 2
                     hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
                     bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-                    display_frame = np.concatenate((image, bgr), axis=1)
+
+                    raw_imgs = np.concatenate((prev_image, image), axis=0)
+                    optical_image = np.concatenate((empty_image, bgr), axis=0)
+
+                    display_frame = np.concatenate((raw_imgs, optical_image), axis=1)
                 else:
                     command = (0, 0, 0)
-                    empty_image = np.zeros_like(image)
-                    display_frame = np.concatenate((image, empty_image), axis=1)
+
+                    raw_imgs = np.concatenate((prev_image, image), axis=0)
+                    both_empty = np.concatenate((empty_image, empty_image), axis=0)
+
+                    display_frame = np.concatenate((raw_imgs, both_empty), axis=1)
                 print(f'{command=}')
                 command_list.append(command)
                 agg_commands = np.asarray(command_list[last_idx:])
