@@ -37,7 +37,6 @@ def crc8(buf):
     crc = 0x77
     for v in buf:
         crc = crc8table[(crc ^ v) & 0xff]
-    print(crc)
     return crc
 
 crc16table = [
@@ -79,5 +78,4 @@ def crc16(buf):
     crc = 0x3692
     for v in buf:
         crc = crc16table[(crc ^ int(v)) & 0xff] ^ (crc >> 8)
-    print(crc)
     return crc

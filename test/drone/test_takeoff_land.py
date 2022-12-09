@@ -3,14 +3,13 @@ from time import sleep
 from aotd.tellopy.tello import Tello
 
 
-
 def handler(event, sender, data, **args):
     drone = sender
     if event is drone.EVENT_FLIGHT_DATA:
         print(data)
 
 
-def test():
+def main():
     drone = Tello()
     try:
         drone.subscribe(drone.EVENT_FLIGHT_DATA, handler)
@@ -27,6 +26,8 @@ def test():
         print(ex)
     finally:
         drone.quit()
+    return
+
 
 if __name__ == '__main__':
-    test()
+    main()

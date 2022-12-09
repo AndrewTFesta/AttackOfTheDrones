@@ -7,7 +7,7 @@ import numpy
 import numpy as np
 import pygame
 
-from aotd.cv import detect_qr, dense_optical_flow, vectors_to_commands, draw_text
+from aotd.cv import detect_qr, dense_optical_flow, vectors_to_commands, poly_area, draw_text
 from aotd.tellopy.tello import Tello
 
 MENU = """
@@ -27,9 +27,9 @@ def main():
 
         # positive value is first command, negative is second command
         command_map = [
+            (drone.left, drone.right),
             (drone.down, drone.up),
-            (drone.right, drone.left),
-            (drone.forward, drone.backward),
+            (drone.backward, drone.forward),
         ]
 
         command_list = []
@@ -38,7 +38,8 @@ def main():
         prev_area = 5000
 
         np.set_printoptions(precision=2, floatmode='fixed', sign='+')
-        pos = 50, 50
+        control_pos = 50, 50
+        manual_pos = 50, 100
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 1
         font_thickness = 2
@@ -60,7 +61,7 @@ def main():
                 video_frame = frame.to_image()
                 image = cv2.cvtColor(numpy.array(video_frame), cv2.COLOR_RGB2BGR)
                 detected, points, info, qr_frame = detect_qr(image)
-                if points is not None:
+                if detected:
                     # get center of all points
                     # draw circle around QR code
                     points = np.array(points[0])
@@ -82,16 +83,21 @@ def main():
                     command = vectors_to_commands(x_vectors, y_vectors, size_proportion, center, rad)
                 else:
                     command = (0, 0, 0)
-                print(f'{command=}')
+                # print(f'{command=}')
                 command_list.append(command)
                 agg_commands = np.asarray(command_list[last_idx:])
                 curr_command = np.average(agg_commands, axis=0)
 
                 text = f'{curr_command}'
-                draw_text(image, text, font, pos, font_scale, font_thickness, text_color, text_color_bg)
+                draw_text(image, text, font, control_pos, font_scale, font_thickness, text_color, text_color_bg)
+                draw_text(image, f'{qr_control=}', font, manual_pos, font_scale, font_thickness, text_color, text_color_bg)
 
                 counter = len(agg_commands)
                 if counter >= buffer_len:
+                    if qr_control:
+                        for axis_command, drone_command in zip(curr_command, command_map):
+                            drone_command = drone_command[0] if axis_command > 0 else drone_command[1]
+                            drone_command(int(axis_command * speed))
                     last_idx = len(command_list)
                 cv2.imshow('Original', image)
                 cv2.waitKey(1)
@@ -113,9 +119,10 @@ def main():
     pygame.display.set_caption('minimal program')
     screen = pygame.display.set_mode((240, 180))
 
-    # define a variable to control the main loop
+    # track if the game is running and if the drone is controlled manually
     running = True
-    speed = 60
+    qr_control = False
+    speed = 90
 
     controls = {
         'w': 'forward',
@@ -124,14 +131,13 @@ def main():
         'd': 'right',
         'space': 'up',
         'left shift': 'down',
-        'right shift': 'down',
         'q': 'counter_clockwise',
         'e': 'clockwise',
         # arrow keys for fast turns and altitude adjustments
-        'left': lambda drone, speed: drone.counter_clockwise(speed * 2),
-        'right': lambda drone, speed: drone.clockwise(speed * 2),
-        'up': lambda drone, speed: drone.up(speed * 2),
-        'down': lambda drone, speed: drone.down(speed * 2),
+        'left': lambda drone, speed: drone.counter_clockwise(speed),
+        'right': lambda drone, speed: drone.clockwise(speed),
+        'up': lambda drone, speed: drone.up(speed),
+        'down': lambda drone, speed: drone.down(speed),
         'tab': lambda drone, speed: drone.takeoff(),
         'r': lambda drone, speed: drone.land(),
     }
@@ -161,8 +167,9 @@ def main():
                 if keyname == 'escape':
                     drone.quit()
                     exit(0)
-                elif keyname == '':
-                    pass
+                elif keyname == 'z':
+                    print(f'Toggle manual control: {qr_control=}')
+                    qr_control = not qr_control
                 elif keyname in controls:
                     key_handler = controls[keyname]
                     if type(key_handler) == str:

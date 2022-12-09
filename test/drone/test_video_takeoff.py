@@ -29,10 +29,12 @@ def main():
                     frame_skip = frame_skip - 1
                     continue
                 start_time = time.time()
+
                 video_frame = frame.to_image()
+                image = cv2.cvtColor(numpy.array(video_frame), cv2.COLOR_RGB2BGR)
                 # todo  process frame to find qr code
                 #       draw square on frame
-                image = cv2.cvtColor(numpy.array(video_frame), cv2.COLOR_RGB2BGR)
+
                 cv2.imshow('Original', image)
                 cv2.waitKey(1)
                 if frame.time_base < 1.0 / 60:
@@ -80,6 +82,7 @@ def main():
         print(ex)
     finally:
         drone.quit()
+    return
 
 
 if __name__ == '__main__':

@@ -120,7 +120,6 @@ class Tello(object):
             self.__send_exposure()
             self.__send_video_encoder_rate()
             self.start_video()
-
         return res
 
     def connect(self):
@@ -809,7 +808,7 @@ class Tello(object):
                     prev_ts = history[0][0]
                     for i in range(1, len(history)):
                         [ts, sz, sn] = history[i]
-                        print('    %02d:%02d:%02d.%03d %4d bytes %04x +%03d%s' %
+                        log.info('    %02d:%02d:%02d.%03d %4d bytes %04x +%03d%s' %
                               (ts.hour, ts.minute, ts.second, ts.microsecond / 1000,
                                sz, sn, (ts - prev_ts).total_seconds() * 1000,
                                (' *' if i == len(history) - 1 else '')))
