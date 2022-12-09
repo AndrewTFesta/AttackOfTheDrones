@@ -33,7 +33,7 @@ def main():
         ]
 
         command_list = []
-        buffer_len = 5
+        buffer_len = 50
         last_idx = 0
         prev_area = 5000
 
