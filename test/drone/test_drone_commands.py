@@ -1,21 +1,24 @@
+import sys
 import threading
-import time
-
+import traceback
 import av
 import cv2 as cv2  # for avoidance of pylint error
 import numpy
-import numpy as np
-import pygame
+import time
 
-from aotd.cv import detect_qr, dense_optical_flow, vectors_to_commands, draw_text
+import numpy as np
+
+from aotd.cv import detect_qr, vectors_to_commands, dense_optical_flow, poly_area, draw_text
+from aotd.tellopy import logger
 from aotd.tellopy.tello import Tello
 
-MENU = """
-SPACE: Takeoff (If on ground)
-SPACE: Land (if flying)
-WASD:  Control
-C:     Connect to drone ssid
-"""
+
+def handler(event, sender, data, **args):
+    drone = sender
+    if event is drone.EVENT_FLIGHT_DATA:
+        # print(data)
+        pass
+    return
 
 
 def main():
@@ -25,9 +28,8 @@ def main():
         frame_skip = 300
         video_running = True
 
-        # positive value is first command, negative is second command
         command_map = [
-            (drone.down, drone.up),
+            (drone.up, drone.down),
             (drone.right, drone.left),
             (drone.forward, drone.backward),
         ]
@@ -59,8 +61,9 @@ def main():
 
                 video_frame = frame.to_image()
                 image = cv2.cvtColor(numpy.array(video_frame), cv2.COLOR_RGB2BGR)
+
                 detected, points, info, qr_frame = detect_qr(image)
-                if points is not None:
+                if detected and info == true_info:
                     # get center of all points
                     # draw circle around QR code
                     points = np.array(points[0])
@@ -93,6 +96,7 @@ def main():
                 counter = len(agg_commands)
                 if counter >= buffer_len:
                     last_idx = len(command_list)
+                    print(f'sending command: {curr_command}')
                 cv2.imshow('Original', image)
                 cv2.waitKey(1)
 
@@ -107,79 +111,32 @@ def main():
 
     video_thread = threading.Thread(target=video_handler, daemon=True)
     drone = Tello()
-    pygame.init()
-    # logo = pygame.image.load('logo32x32.png')
-    # pygame.display.set_icon(logo)
-    pygame.display.set_caption('minimal program')
-    screen = pygame.display.set_mode((240, 180))
+    drone.set_loglevel(logger.LOG_WARN)
 
-    # define a variable to control the main loop
-    running = True
-    speed = 60
+    try:
+        drone.connect()
+        drone.wait_for_connection(60.0)
 
-    controls = {
-        'w': 'forward',
-        's': 'backward',
-        'a': 'left',
-        'd': 'right',
-        'space': 'up',
-        'left shift': 'down',
-        'right shift': 'down',
-        'q': 'counter_clockwise',
-        'e': 'clockwise',
-        # arrow keys for fast turns and altitude adjustments
-        'left': lambda drone, speed: drone.counter_clockwise(speed * 2),
-        'right': lambda drone, speed: drone.clockwise(speed * 2),
-        'up': lambda drone, speed: drone.up(speed * 2),
-        'down': lambda drone, speed: drone.down(speed * 2),
-        'tab': lambda drone, speed: drone.takeoff(),
-        'r': lambda drone, speed: drone.land(),
-    }
+        retry = 3
+        container = None
+        while container is None and 0 < retry:
+            retry -= 1
+            try:
+                container = av.open(drone.get_video_stream())
+            except av.AVError as ave:
+                print(ave)
+                print('retry...')
 
-    # set up connection for drone and wait for video to be ready
-    drone.connect()
-    drone.wait_for_connection(60.0)
-    retry = 3
-    container = None
-    while container is None and 0 < retry:
-        retry -= 1
-        try:
-            container = av.open(drone.get_video_stream())
-        except av.AVError as ave:
-            print(ave)
-            print('retry...')
-
-    video_thread.start()
-    while running:
-        time.sleep(0.01)  # loop with pygame.event.get() is too mush tight w/o some sleep
-        # event handling, gets all event from the event queue
-        for event in pygame.event.get():
-            # WASD for movement
-            if event.type == pygame.KEYDOWN:
-                print('+' + pygame.key.name(event.key))
-                keyname = pygame.key.name(event.key)
-                if keyname == 'escape':
-                    drone.quit()
-                    exit(0)
-                elif keyname == '':
-                    pass
-                elif keyname in controls:
-                    key_handler = controls[keyname]
-                    if type(key_handler) == str:
-                        getattr(drone, key_handler)(speed)
-                    else:
-                        key_handler(drone, speed)
-
-            elif event.type == pygame.KEYUP:
-                print('-' + pygame.key.name(event.key))
-                keyname = pygame.key.name(event.key)
-                if keyname in controls:
-                    key_handler = controls[keyname]
-                    if type(key_handler) == str:
-                        getattr(drone, key_handler)(0)
-                    else:
-                        key_handler(drone, 0)
-    drone.quit()
+        video_thread.start()
+        stop = input()
+        video_running = False
+        time.sleep(5)
+    except Exception as ex:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
+        print(ex)
+    finally:
+        drone.quit()
     return
 
 
